@@ -1,0 +1,203 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  APP_NAME: "ClipBoard Pro"
+  APP_ID: "com.clipboardpro.app"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.23"
+
+      - name: Install fyne command
+        run: go install fyne.io/tools/cmd/fyne@latest
+
+      - name: Extract version
+        id: version
+        shell: bash
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build Windows package
+        shell: bash
+        run: |
+          fyne package -os windows -name "${{ env.APP_NAME }}" --app-id "${{ env.APP_ID }}"
+
+          # Build raw binary for updates
+          CGO_ENABLED=1 go build -ldflags "-s -w -X clipboardpro/internal/app.Version=v${{ steps.version.outputs.version }} -H=windowsgui" -o clipboardpro.exe ./main.go
+
+      - name: Prepare artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+
+          7z a "artifacts/ClipBoard-Pro-${{ steps.version.outputs.version }}-windows-amd64.zip" "${{ env.APP_NAME }}.exe"
+          7z a "artifacts/clipboardpro_windows_amd64.zip" clipboardpro.exe
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-amd64
+          path: artifacts/*
+
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.23"
+
+      - name: Install fyne command
+        run: go install fyne.io/tools/cmd/fyne@latest
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build macOS package
+        env:
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          fyne package -os darwin -name "${{ env.APP_NAME }}" --app-id "${{ env.APP_ID }}"
+
+          # Build raw binary for updates
+          CGO_ENABLED=1 go build -ldflags "-s -w -X clipboardpro/internal/app.Version=v${{ steps.version.outputs.version }}" -o clipboardpro ./main.go
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p artifacts
+
+          tar -czf "artifacts/ClipBoard-Pro-${{ steps.version.outputs.version }}-darwin-${{ matrix.arch }}.tar.gz" "${{ env.APP_NAME }}.app"
+          tar -czf "artifacts/clipboardpro_darwin_${{ matrix.arch }}.tar.gz" clipboardpro
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwin-${{ matrix.arch }}
+          path: artifacts/*
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.23"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev
+
+      - name: Install fyne command
+        run: go install fyne.io/tools/cmd/fyne@latest
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build Linux package
+        run: |
+          fyne package -os linux -name "${{ env.APP_NAME }}" --app-id "${{ env.APP_ID }}"
+
+          # Build raw binary for updates
+          CGO_ENABLED=1 go build -ldflags "-s -w -X clipboardpro/internal/app.Version=v${{ steps.version.outputs.version }}" -o clipboardpro ./main.go
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p artifacts
+
+          mv "${{ env.APP_NAME }}.tar.xz" "artifacts/ClipBoard-Pro-${{ steps.version.outputs.version }}-linux-amd64.tar.xz"
+          tar -czf "artifacts/clipboardpro_linux_amd64.tar.gz" clipboardpro
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64
+          path: artifacts/*
+
+  create-release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Organize release files
+        run: |
+          mkdir -p release-files
+          find release-artifacts -type f -exec cp {} release-files/ \;
+
+          echo "All release files:"
+          ls -la release-files/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-files/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## 📋 ClipBoard Pro ${{ github.ref_name }}
+
+            Cross-platform clipboard manager with automatic updates.
+
+            ### 📥 Downloads for New Users
+
+            **Windows:**
+            - `ClipBoard-Pro-*-windows-amd64.zip` - Extract and run the .exe
+
+            **macOS:**
+            - `ClipBoard-Pro-*-darwin-amd64.tar.gz` - Intel Macs (Extract and drag .app to Applications)
+            - `ClipBoard-Pro-*-darwin-arm64.tar.gz` - Apple Silicon Macs (Extract and drag .app to Applications)
+
+            **Linux:**
+            - `ClipBoard-Pro-*-linux-amd64.tar.xz` - Extract and run
+
+            ### 🔧 Update Assets (Used Automatically)
+
+            These files are used by the built-in auto-updater:
+            - `clipboardpro_*` - Raw binaries for automatic updates
+
+            ### 🚀 Installation
+
+            **Windows:** Extract the .zip and run the .exe  
+            **macOS:** Extract and drag the .app to Applications folder  
+            **Linux:** Extract and run the binary
+
+            ### ✨ Auto-Update
+
+            Once installed, the app will automatically check for updates!
+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
