@@ -156,25 +156,37 @@ func (uc *UpdateChecker) showUpdateDialog(release *selfupdate.Release) {
 }
 
 func (uc *UpdateChecker) performUpdate(release *selfupdate.Release) {
-	progress := dialog.NewProgressInfinite("Updating", "Downloading update...", uc.app.window)
-	progress.Show()
+	fyne.Do(func() {
+		progressBar := widget.NewProgressBarInfinite()
 
-	go func() {
-		defer progress.Hide()
+		content := container.NewVBox(
+			widget.NewLabel("Downloading update..."),
+			progressBar,
+		)
 
-		if err := uc.doUpdate(release); err != nil {
-			fyne.Do(func() {
-				dialog.ShowError(fmt.Errorf("update failed: %v", err), uc.app.window)
+		progress := dialog.NewCustomWithoutButtons("Updating", content, uc.app.window)
+		progress.Show()
+
+		go func() {
+			defer fyne.Do(func() {
+				progressBar.Stop()
+				progress.Hide()
 			})
-			return
-		}
 
-		fyne.Do(func() {
-			dialog.ShowInformation("Update Complete",
-				"ClipBoard Pro has been updated successfully!\n\nPlease restart the application to use the new version.",
-				uc.app.window)
-		})
-	}()
+			if err := uc.doUpdate(release); err != nil {
+				fyne.Do(func() {
+					dialog.ShowError(fmt.Errorf("update failed: %v", err), uc.app.window)
+				})
+				return
+			}
+
+			fyne.Do(func() {
+				dialog.ShowInformation("Update Complete",
+					"ClipBoard Pro has been updated successfully!\n\nPlease restart the application to use the new version.",
+					uc.app.window)
+			})
+		}()
+	})
 }
 
 func (uc *UpdateChecker) doUpdate(release *selfupdate.Release) error {
