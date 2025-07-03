@@ -1,14 +1,12 @@
 package components
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -18,12 +16,10 @@ import (
 )
 
 type ItemList struct {
-	repository  *database.Repository
+	controller  *ItemListController
 	app         AppInterface
 	container   *fyne.Container
 	list        *widget.List
-	items       []*database.ClipboardItem
-	searchTerm  string
 	statusLabel *widget.Label
 }
 
@@ -35,18 +31,24 @@ type AppInterface interface {
 }
 
 func NewItemList(repository *database.Repository, app AppInterface) *ItemList {
+	statusLabel := widget.NewLabel("Ready")
 	itemList := &ItemList{
-		repository:  repository,
 		app:         app,
-		items:       make([]*database.ClipboardItem, 0),
-		statusLabel: widget.NewLabel("Ready"),
+		statusLabel: statusLabel,
 	}
+
+	itemList.controller = NewItemListController(
+		repository,
+		app,
+		statusLabel,
+		itemList.listRefresh,
+		itemList.getWindow,
+	)
 
 	itemList.createList()
 	return itemList
 }
 
-// Helper function to safely get the window
 func (il *ItemList) getWindow() fyne.Window {
 	if il.app != nil {
 		return il.app.GetWindow()
@@ -76,7 +78,7 @@ func (il *ItemList) Create() fyne.CanvasObject {
 func (il *ItemList) createList() {
 	il.list = widget.NewList(
 		func() int {
-			return len(il.items)
+			return len(il.controller.GetItems())
 		},
 		func() fyne.CanvasObject {
 			return il.createItemTemplate()
@@ -87,15 +89,18 @@ func (il *ItemList) createList() {
 	)
 
 	il.list.OnSelected = func(id widget.ListItemID) {
-		if id < len(il.items) {
-			il.copyItem(il.items[id].ID)
+		if id < len(il.controller.GetItems()) {
+			il.controller.CopyItem(il.controller.GetItems()[id].ID)
 		}
 		il.list.UnselectAll()
 	}
 }
 
+func (il *ItemList) listRefresh() {
+	il.list.Refresh()
+}
+
 func (il *ItemList) createItemTemplate() fyne.CanvasObject {
-	// Create a more visually appealing item template
 	icon := widget.NewIcon(theme.DocumentIcon())
 	icon.Resize(fyne.NewSize(32, 32))
 
@@ -112,7 +117,6 @@ func (il *ItemList) createItemTemplate() fyne.CanvasObject {
 	size := widget.NewLabel("")
 	size.TextStyle = fyne.TextStyle{Monospace: true}
 
-	// Action buttons with better icons and tooltips
 	pinButton := widget.NewButtonWithIcon("", theme.ContentAddIcon(), nil)
 	pinButton.Importance = widget.LowImportance
 
@@ -128,7 +132,6 @@ func (il *ItemList) createItemTemplate() fyne.CanvasObject {
 		deleteButton,
 	)
 
-	// Info container for metadata (removed pinnedIcon)
 	infoContainer := container.NewHBox(
 		timestamp,
 		widget.NewSeparator(),
@@ -142,7 +145,6 @@ func (il *ItemList) createItemTemplate() fyne.CanvasObject {
 		infoContainer,
 	)
 
-	// Main container with better layout
 	mainContainer := container.NewBorder(
 		nil, nil,
 		icon,
@@ -150,7 +152,6 @@ func (il *ItemList) createItemTemplate() fyne.CanvasObject {
 		textContainer,
 	)
 
-	// Add some padding
 	return container.NewPadded(
 		container.NewVBox(
 			mainContainer,
@@ -160,16 +161,16 @@ func (il *ItemList) createItemTemplate() fyne.CanvasObject {
 }
 
 func (il *ItemList) updateItem(id widget.ListItemID, obj fyne.CanvasObject) {
-	if id >= len(il.items) {
+	items := il.controller.GetItems()
+	if id >= len(items) {
 		return
 	}
 
-	item := il.items[id]
+	item := items[id]
 	paddedContainer := obj.(*fyne.Container)
 	container := paddedContainer.Objects[0].(*fyne.Container)
 	mainContainer := container.Objects[0].(*fyne.Container)
 
-	// Get components
 	icon := mainContainer.Objects[1].(*widget.Icon)
 	textContainer := mainContainer.Objects[0].(*fyne.Container)
 	actionContainer := mainContainer.Objects[2].(*fyne.Container)
@@ -185,14 +186,12 @@ func (il *ItemList) updateItem(id widget.ListItemID, obj fyne.CanvasObject) {
 	editButton := actionContainer.Objects[1].(*widget.Button)
 	deleteButton := actionContainer.Objects[2].(*widget.Button)
 
-	// Update content
 	icon.SetResource(il.getItemIcon(item.Type))
 	title.SetText(il.getItemTitle(item))
 	preview.SetText(il.getItemPreview(item))
 	timestamp.SetText(il.formatTimeAgo(item.Timestamp))
 	size.SetText(il.formatBytes(item.Size))
 
-	// Update pin status with better icons (removed pinnedIcon.Show/Hide)
 	if item.Pinned {
 		pinButton.SetIcon(theme.ContentRemoveIcon()) // Minus icon for unpinning
 		pinButton.SetText("Unpin")
@@ -201,223 +200,36 @@ func (il *ItemList) updateItem(id widget.ListItemID, obj fyne.CanvasObject) {
 		pinButton.SetText("Pin")
 	}
 
-	// Set button callbacks
 	pinButton.OnTapped = func() {
-		il.togglePin(item.ID)
+		il.controller.TogglePin(item.ID)
 	}
 
 	editButton.OnTapped = func() {
-		il.editTitle(item)
+		il.controller.EditTitle(item)
 	}
 
 	deleteButton.OnTapped = func() {
-		il.deleteItem(item.ID)
+		il.controller.DeleteItem(item.ID)
 	}
 }
 
 func (il *ItemList) LoadRecentItems() {
-	fyne.Do(func() {
-		il.statusLabel.SetText("Loading...")
-	})
-
-	go func() {
-		ctx := context.Background()
-		items, err := il.repository.GetRecentItems(ctx, 100)
-
-		fyne.Do(func() {
-			if err != nil {
-				il.statusLabel.SetText("Error loading items")
-				window := il.getWindow()
-				if window != nil {
-					dialog.ShowError(fmt.Errorf("failed to load clipboard history: %w", err), window)
-				}
-				return
-			}
-
-			il.items = items
-			il.list.Refresh()
-
-			// Update status
-			count := len(items)
-			if count == 0 {
-				il.statusLabel.SetText("No items yet")
-			} else if count == 1 {
-				il.statusLabel.SetText("1 item")
-			} else {
-				il.statusLabel.SetText(fmt.Sprintf("%d items", count))
-			}
-		})
-	}()
+	il.controller.LoadRecentItems()
 }
 
 func (il *ItemList) Search(query string) {
-	il.searchTerm = query // Use public field
-
-	if query == "" {
-		il.LoadRecentItems()
-		return
-	}
-
-	fyne.Do(func() {
-		il.statusLabel.SetText("Searching...")
-	})
-
-	go func() {
-		ctx := context.Background()
-		items, err := il.repository.SearchItems(ctx, query, 100)
-
-		fyne.Do(func() {
-			if err != nil {
-				il.statusLabel.SetText("Search failed")
-				window := il.getWindow()
-				if window != nil {
-					dialog.ShowError(fmt.Errorf("Search failed: %w", err), window)
-				}
-				return
-			}
-
-			il.items = items
-			il.list.Refresh()
-
-			// Update status
-			count := len(items)
-			if count == 0 {
-				il.statusLabel.SetText(fmt.Sprintf("No results for '%s'", query))
-			} else if count == 1 {
-				il.statusLabel.SetText("1 result")
-			} else {
-				il.statusLabel.SetText(fmt.Sprintf("%d results", count))
-			}
-		})
-	}()
+	il.controller.Search(query)
 }
 
 func (il *ItemList) IsSearching() bool {
-	return il.searchTerm != ""
+	return il.controller.IsSearching()
 }
 
 func (il *ItemList) Refresh() {
-	if il.searchTerm == "" { // Use public field
-		il.LoadRecentItems()
-	} else {
-		il.Search(il.searchTerm) // Use public field
-	}
+	il.controller.Refresh()
 }
 
-func (il *ItemList) copyItem(id int64) {
-	if err := il.app.CopyItemToClipboard(id); err != nil {
-		fyne.Do(func() {
-			window := il.getWindow()
-			if window != nil {
-				dialog.ShowError(fmt.Errorf("failed to copy item: %w", err), window)
-			}
-		})
-		return
-	}
 
-	// Show brief success message
-	fyne.Do(func() {
-		il.statusLabel.SetText("✓ Copied to clipboard")
-	})
-
-	// Reset status after 2 seconds
-	go func() {
-		time.Sleep(2 * time.Second)
-		fyne.Do(func() {
-			il.Refresh() // This will update the status
-		})
-	}()
-}
-
-func (il *ItemList) togglePin(id int64) {
-	go func() {
-		ctx := context.Background()
-		if err := il.repository.TogglePin(ctx, id); err != nil {
-			fyne.Do(func() {
-				window := il.getWindow()
-				if window != nil {
-					dialog.ShowError(fmt.Errorf("failed to pin/unpin item: %w", err), window)
-				}
-			})
-			return
-		}
-
-		fyne.Do(func() {
-			il.Refresh()
-		})
-	}()
-}
-
-func (il *ItemList) deleteItem(id int64) {
-	window := il.getWindow()
-	if window == nil {
-		return
-	}
-
-	fyne.Do(func() {
-		dialog.ShowConfirm("Delete Item",
-			"Are you sure you want to permanently delete this clipboard item?",
-			func(confirmed bool) {
-				if !confirmed {
-					return
-				}
-
-				go func() {
-					ctx := context.Background()
-					if err := il.repository.DeleteItem(ctx, id); err != nil {
-						fyne.Do(func() {
-							dialog.ShowError(fmt.Errorf("failed to delete item: %w", err), window)
-						})
-						return
-					}
-
-					fyne.Do(func() {
-						il.statusLabel.SetText("Item deleted")
-						il.Refresh()
-					})
-				}()
-			}, window)
-	})
-}
-
-func (il *ItemList) editTitle(item *database.ClipboardItem) {
-	window := il.getWindow()
-	if window == nil {
-		return
-	}
-
-	fyne.Do(func() {
-		entry := widget.NewEntry()
-		entry.SetText(item.Title)
-		entry.SetPlaceHolder("Enter a custom title for this item...")
-
-		content := container.NewVBox(
-			widget.NewLabel("Give this clipboard item a custom title to make it easier to find:"),
-			entry,
-		)
-
-		dialog.ShowCustomConfirm("Edit Title", "Save", "Cancel", content, func(confirmed bool) {
-			if !confirmed {
-				return
-			}
-
-			go func() {
-				ctx := context.Background()
-				if err := il.repository.UpdateTitle(ctx, item.ID, entry.Text); err != nil {
-					fyne.Do(func() {
-						dialog.ShowError(fmt.Errorf("failed to update title: %w", err), window)
-					})
-					return
-				}
-
-				fyne.Do(func() {
-					il.statusLabel.SetText("Title updated")
-					il.Refresh()
-				})
-			}()
-		}, window)
-	})
-}
 
 func (il *ItemList) getItemIcon(itemType string) fyne.Resource {
 	switch itemType {

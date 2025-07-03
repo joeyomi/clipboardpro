@@ -24,9 +24,9 @@ Manages clipboard history across Windows, macOS, and Linux.
 Download the latest release for your platform from the [Releases page](https://github.com/joeyomi/clipboardpro/releases).
 
 **Downloads:**
-- **Windows**: `ClipBoard-Pro-*-windows-amd64.zip`
+- **Windows**: `ClipBoard-Pro-*-windows-amd64.zip` (Intel/AMD 64-bit) or `ClipBoard-Pro-*-windows-arm64.zip` (ARM 64-bit)
 - **macOS**: `ClipBoard-Pro-*-darwin-amd64.tar.gz` (Intel) or `ClipBoard-Pro-*-darwin-arm64.tar.gz` (Apple Silicon)
-- **Linux**: `ClipBoard-Pro-*-linux-amd64.tar.xz`
+- **Linux**: `ClipBoard-Pro-*-linux-amd64.tar.xz` (Intel/AMD 64-bit) or `ClipBoard-Pro-*-linux-arm64.tar.xz` (ARM 64-bit)
 
 ### Installation Instructions
 

@@ -40,7 +40,6 @@ type ClipboardProApp struct {
 	repository *database.Repository
 	monitor    *clipboard.Monitor
 
-	// UI Components
 	itemList  *components.ItemList
 	searchBar *components.SearchBar
 	toolbar   *components.Toolbar
@@ -157,7 +156,6 @@ func (a *ClipboardProApp) createMainWindow() {
 	content := a.createMainContent()
 	a.window.SetContent(content)
 
-	// Set window callbacks
 	a.window.SetCloseIntercept(func() {
 		a.cleanup()
 		a.fyneApp.Quit()
@@ -336,8 +334,7 @@ func (a *ClipboardProApp) showSettings() {
 	}
 
 	fyne.Do(func() {
-		settingsDialog := components.NewSettingsDialog(a.config, a.window)
-		settingsDialog.Show(func(newConfig *config.Config) {
+		settingsDialog := components.NewSettingsDialog(a.config, a.window, func(newConfig *config.Config) {
 			a.config = newConfig
 			configDir, _ := a.getConfigDir()
 			if err := a.config.Save(filepath.Join(configDir, "config.json")); err != nil {
@@ -348,6 +345,7 @@ func (a *ClipboardProApp) showSettings() {
 				a.statusBar.SetText("Settings saved")
 			})
 		})
+		settingsDialog.Show()
 	})
 }
 

@@ -14,24 +14,27 @@ import (
 )
 
 type SettingsDialog struct {
-	config *config.Config
-	parent fyne.Window
+	controller *SettingsController
+	config     *config.Config
+	parent     fyne.Window
 }
 
-func NewSettingsDialog(cfg *config.Config, parent fyne.Window) *SettingsDialog {
-	return &SettingsDialog{
+func NewSettingsDialog(cfg *config.Config, parent fyne.Window, onSave func(*config.Config)) *SettingsDialog {
+	sd := &SettingsDialog{
 		config: cfg,
 		parent: parent,
 	}
+	sd.controller = NewSettingsController(cfg, parent, onSave)
+	return sd
 }
 
-func (sd *SettingsDialog) Show(onSave func(*config.Config)) {
-	content := sd.createContent(onSave)
+func (sd *SettingsDialog) Show() {
+	content := sd.createContent()
 
 	dialog.ShowCustom("Settings", "Close", content, sd.parent)
 }
 
-func (sd *SettingsDialog) createContent(onSave func(*config.Config)) fyne.CanvasObject {
+func (sd *SettingsDialog) createContent() fyne.CanvasObject {
 	maxItemsEntry := sd.createNumericEntry(strconv.Itoa(sd.config.MaxHistoryItems))
 	maxDaysEntry := sd.createNumericEntry(strconv.Itoa(sd.config.MaxHistoryDays))
 
@@ -47,8 +50,8 @@ func (sd *SettingsDialog) createContent(onSave func(*config.Config)) fyne.Canvas
 		sd.createUpdatesTab(checkUpdatesOnStartupCheck, autoDownloadUpdatesCheck),
 	)
 
-	saveButton := sd.createSaveButton(maxItemsEntry, maxDaysEntry, darkModeCheck, checkUpdatesOnStartupCheck, autoDownloadUpdatesCheck, onSave)
-	resetButton := sd.createResetButton(onSave)
+	saveButton := sd.createSaveButton(maxItemsEntry, maxDaysEntry, darkModeCheck, checkUpdatesOnStartupCheck, autoDownloadUpdatesCheck)
+	resetButton := sd.createResetButton()
 
 	buttonContainer := container.NewHBox(
 		resetButton,
@@ -131,47 +134,17 @@ func (sd *SettingsDialog) createUpdatesTab(checkUpdatesOnStartupCheck, autoDownl
 	))
 }
 
-func (sd *SettingsDialog) createSaveButton(maxItemsEntry, maxDaysEntry *widget.Entry, darkModeCheck, checkUpdatesOnStartupCheck, autoDownloadUpdatesCheck *widget.Check, onSave func(*config.Config)) *widget.Button {
+func (sd *SettingsDialog) createSaveButton(maxItemsEntry, maxDaysEntry *widget.Entry, darkModeCheck, checkUpdatesOnStartupCheck, autoDownloadUpdatesCheck *widget.Check) *widget.Button {
 	saveButton := widget.NewButton("Save Settings", func() {
-		// Validate inputs
-		maxItems, err := strconv.Atoi(maxItemsEntry.Text)
-		if err != nil {
-			dialog.ShowError(err, sd.parent)
-			return
-		}
-
-		maxDays, err := strconv.Atoi(maxDaysEntry.Text)
-		if err != nil {
-			dialog.ShowError(err, sd.parent)
-			return
-		}
-
-		// Create new config
-		newConfig := &config.Config{}
-		*newConfig = *sd.config
-
-		newConfig.MaxHistoryItems = maxItems
-		newConfig.MaxHistoryDays = maxDays
-		newConfig.DarkMode = darkModeCheck.Checked
-		newConfig.CheckUpdatesOnStartup = checkUpdatesOnStartupCheck.Checked
-		newConfig.AutoDownloadUpdates = autoDownloadUpdatesCheck.Checked
-
-		onSave(newConfig)
+		sd.controller.SaveSettings(maxItemsEntry, maxDaysEntry, darkModeCheck, checkUpdatesOnStartupCheck, autoDownloadUpdatesCheck)
 	})
 	saveButton.Importance = widget.HighImportance
 	return saveButton
 }
 
-func (sd *SettingsDialog) createResetButton(onSave func(*config.Config)) *widget.Button {
+func (sd *SettingsDialog) createResetButton() *widget.Button {
 	resetButton := widget.NewButton("Reset to Defaults", func() {
-		dialog.ShowConfirm("Reset Settings",
-			"Are you sure you want to reset all settings to their default values?",
-			func(confirmed bool) {
-				if confirmed {
-					defaultConfig := config.Default()
-					onSave(defaultConfig)
-				}
-			}, sd.parent)
+		sd.controller.ResetSettings()
 	})
 	resetButton.Importance = widget.LowImportance
 	return resetButton
