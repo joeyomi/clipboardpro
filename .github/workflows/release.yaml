@@ -160,6 +160,11 @@ jobs:
           echo "All release files:"
           ls -la release-files/
 
+      - name: Generate checksums
+        run: |
+          cd release-files
+          sha256sum * > checksums.txt
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -188,6 +193,7 @@ jobs:
 
             These files are used by the built-in auto-updater:
             - `clipboardpro_*` - Raw binaries for automatic updates
+            - `checksums.txt` - Verification checksums
 
             ### 🚀 Installation
 
