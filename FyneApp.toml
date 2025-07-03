@@ -1,0 +1,7 @@
+Website = "https://github.com/joeyomi/clipboardpro"
+
+[Details]
+  Icon = "icon.png"
+  Name = "ClipBoard Pro"
+  ID = "com.clipboardpro.app"
+  Version = "1.0.0"
