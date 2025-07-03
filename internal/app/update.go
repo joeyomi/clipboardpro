@@ -7,11 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/Masterminds/semver/v3"
 	"github.com/creativeprojects/go-selfupdate"
 )
 
@@ -21,7 +23,6 @@ type UpdateChecker struct {
 }
 
 func NewUpdateChecker(app *ClipboardProApp) *UpdateChecker {
-	// Use GitHub releases as source
 	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{})
 	if err != nil {
 		log.Printf("Failed to create update source: %v", err)
@@ -74,7 +75,7 @@ func (uc *UpdateChecker) checkForUpdatesAsync(ctx context.Context) (bool, *selfu
 		return false, nil, err
 	}
 
-	release, found, err := updater.DetectLatest(ctx, selfupdate.NewRepositorySlug("joeyomi", "clipboardpro")) // TBD: Change this
+	release, found, err := updater.DetectLatest(ctx, selfupdate.NewRepositorySlug("joeyomi", "clipboardpro"))
 	if err != nil {
 		return false, nil, err
 	}
@@ -83,14 +84,63 @@ func (uc *UpdateChecker) checkForUpdatesAsync(ctx context.Context) (bool, *selfu
 		return false, nil, fmt.Errorf("no releases found")
 	}
 
-	return release.GreaterThan(Version), release, nil
+	currentVersion := uc.normalizeVersion(uc.app.GetVersion())
+
+	hasUpdate, err := uc.safeVersionComparison(release, currentVersion)
+	if err != nil {
+		log.Printf("Version comparison failed: %v", err)
+		return true, release, nil
+	}
+
+	return hasUpdate, release, nil
+}
+
+func (uc *UpdateChecker) normalizeVersion(version string) string {
+	switch version {
+	case "dev", "development", "", "0.0.0-dev":
+		return "0.0.0-dev"
+	default:
+		if len(version) > 0 && version[0] == 'v' {
+			return version[1:]
+		}
+		return version
+	}
+}
+
+func (uc *UpdateChecker) safeVersionComparison(release *selfupdate.Release, currentVersion string) (bool, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Panic during version comparison: %v (current: %s, release: %s)",
+				r, currentVersion, release.Version())
+		}
+	}()
+
+	if currentVersion == "0.0.0-dev" {
+		return true, nil
+	}
+
+	current, err := semver.NewVersion(currentVersion)
+	if err != nil {
+		log.Printf("Failed to parse current version '%s': %v", currentVersion, err)
+		return true, nil
+	}
+
+	releaseVersionStr := strings.TrimPrefix(release.Version(), "v")
+
+	releaseVersion, err := semver.NewVersion(releaseVersionStr)
+	if err != nil {
+		log.Printf("Failed to parse release version '%s': %v", releaseVersionStr, err)
+		return false, fmt.Errorf("invalid release version format: %w", err)
+	}
+
+	return releaseVersion.GreaterThan(current), nil
 }
 
 func (uc *UpdateChecker) showUpdateDialog(release *selfupdate.Release) {
 	content := container.NewVBox(
 		widget.NewLabelWithStyle("Update Available!", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		widget.NewLabel(fmt.Sprintf("Version %s is available", release.Version())),
-		widget.NewLabel(fmt.Sprintf("Current version: %s", Version)),
+		widget.NewLabel(fmt.Sprintf("Current version: %s", uc.app.GetVersion())),
 		widget.NewLabel(""),
 		widget.NewLabel("Would you like to download and install the update?"),
 		widget.NewLabel(""),
@@ -128,18 +178,15 @@ func (uc *UpdateChecker) performUpdate(release *selfupdate.Release) {
 }
 
 func (uc *UpdateChecker) doUpdate(release *selfupdate.Release) error {
-	// Get the correct executable path
 	exe, err := uc.getExecutablePath()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
 	}
 
-	// Check permissions
 	if err := uc.checkWritePermissions(exe); err != nil {
 		return fmt.Errorf("insufficient permissions to update. Please run as administrator or move the app to a user-writable location: %w", err)
 	}
 
-	// Create updater
 	updater, err := selfupdate.NewUpdater(selfupdate.Config{
 		Source: uc.source,
 		Validator: &selfupdate.ChecksumValidator{
@@ -150,7 +197,6 @@ func (uc *UpdateChecker) doUpdate(release *selfupdate.Release) error {
 		return err
 	}
 
-	// Perform update
 	return updater.UpdateTo(context.Background(), release, exe)
 }
 
@@ -160,16 +206,13 @@ func (uc *UpdateChecker) getExecutablePath() (string, error) {
 		return "", err
 	}
 
-	// Resolve symlinks
 	exe, err = filepath.EvalSymlinks(exe)
 	if err != nil {
 		return "", err
 	}
 
-	// On macOS, if we're inside an app bundle, update the actual binary
 	if runtime.GOOS == "darwin" {
 		if filepath.Base(filepath.Dir(exe)) == "MacOS" {
-			// We're inside Contents/MacOS/ - this is correct for app bundles
 			return exe, nil
 		}
 	}
@@ -178,7 +221,6 @@ func (uc *UpdateChecker) getExecutablePath() (string, error) {
 }
 
 func (uc *UpdateChecker) checkWritePermissions(path string) error {
-	// Try to open the file for writing
 	file, err := os.OpenFile(path, os.O_WRONLY, 0)
 	if err != nil {
 		return err

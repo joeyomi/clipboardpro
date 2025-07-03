@@ -21,19 +21,17 @@ import (
 	"clipboardpro/internal/ui/components"
 )
 
-// Build-time variables (set by GoReleaser)
 var (
-	Version   = "0.0.0-dev" // Will be replaced by -ldflags
-	BuildDate = "unknown"   // Will be replaced by -ldflags
-	GitCommit = "unknown"   // Will be replaced by -ldflags
+	Version   = "0.0.0-dev"
+	BuildDate = "unknown"
+	GitCommit = "unknown"
 )
 
 const (
 	AppName = "ClipBoard Pro"
 	AppID   = "com.clipboardpro.app"
 
-	// Update configuration
-	UpdateCheckInterval = 24 * time.Hour // Check daily
+	UpdateCheckInterval = 24 * time.Hour
 )
 
 type ClipboardProApp struct {
@@ -49,7 +47,6 @@ type ClipboardProApp struct {
 	toolbar   *components.Toolbar
 	statusBar *widget.Label
 
-	// Update functionality
 	updateChecker *UpdateChecker
 
 	ctx        context.Context
@@ -58,14 +55,6 @@ type ClipboardProApp struct {
 
 func NewClipboardProApp() (*ClipboardProApp, error) {
 	fyneApp := app.NewWithID(AppID)
-
-	// Set app metadata using build-time version
-	app.SetMetadata(fyne.AppMetadata{
-		ID:      AppID,
-		Name:    AppName,
-		Version: Version,
-		Build:   1,
-	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -82,6 +71,26 @@ func NewClipboardProApp() (*ClipboardProApp, error) {
 	return clipboardApp, nil
 }
 
+func (a *ClipboardProApp) GetVersion() string {
+	if a.fyneApp != nil {
+		metadata := a.fyneApp.Metadata()
+		if metadata.Version != "" {
+			return metadata.Version
+		}
+	}
+	return Version
+}
+
+func (a *ClipboardProApp) GetAppName() string {
+	if a.fyneApp != nil {
+		metadata := a.fyneApp.Metadata()
+		if metadata.Name != "" {
+			return metadata.Name
+		}
+	}
+	return AppName
+}
+
 func (a *ClipboardProApp) initialize() error {
 	if err := a.initConfig(); err != nil {
 		return err
@@ -92,10 +101,8 @@ func (a *ClipboardProApp) initialize() error {
 	a.initServices()
 	a.initUIComponents()
 
-	// Initialize update checker
 	a.updateChecker = NewUpdateChecker(a)
 
-	// Create main window
 	a.createMainWindow()
 
 	return nil
@@ -143,12 +150,11 @@ func (a *ClipboardProApp) initUIComponents() {
 }
 
 func (a *ClipboardProApp) createMainWindow() {
-	a.window = a.fyneApp.NewWindow(AppName)
+	a.window = a.fyneApp.NewWindow(a.GetAppName())
 	a.window.SetMaster()
 	a.window.Resize(fyne.NewSize(900, 700))
 	a.window.CenterOnScreen()
 
-	// Create main content
 	content := a.createMainContent()
 	a.window.SetContent(content)
 
@@ -158,27 +164,23 @@ func (a *ClipboardProApp) createMainWindow() {
 		a.fyneApp.Quit()
 	})
 
-	// Show welcome message for first-time users
 	a.showWelcomeIfFirstRun()
 }
 
 func (a *ClipboardProApp) createMainContent() fyne.CanvasObject {
-	// Create a welcome panel for when there are no items
 	welcomeContent := container.NewVBox(
 		widget.NewIcon(theme.InfoIcon()),
 		widget.NewLabelWithStyle("Welcome to ClipBoard Pro!", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		widget.NewLabel("Your clipboard history will appear here automatically."),
 		widget.NewLabel("Copy some text or images to get started!"),
 	)
-	welcomeContent.Hide() // Initially hidden
+	welcomeContent.Hide()
 
-	// Create main content area
 	contentArea := container.NewMax(
 		a.itemList.Create(),
 		welcomeContent,
 	)
 
-	// Create main layout with better spacing
 	mainContainer := container.NewBorder(
 		container.NewVBox(
 			a.toolbar.Create(),
@@ -199,15 +201,12 @@ func (a *ClipboardProApp) createMainContent() fyne.CanvasObject {
 }
 
 func (a *ClipboardProApp) showWelcomeIfFirstRun() {
-	// Check if this is the first run
 	configDir, _ := a.getConfigDir()
 	firstRunFile := filepath.Join(configDir, ".first_run")
 
 	if _, err := os.Stat(firstRunFile); os.IsNotExist(err) {
-		// Create the first run marker
 		os.WriteFile(firstRunFile, []byte(""), 0644)
 
-		// Show welcome dialog
 		welcomeText := `Welcome to ClipBoard Pro!
 
 This application will automatically save everything you copy to your clipboard, making it easy to find and reuse later.
@@ -258,7 +257,6 @@ func (a *ClipboardProApp) ShowAndRun() {
 			case <-ticker.C:
 				if a.itemList != nil {
 					fyne.Do(func() {
-						// Only refresh if showing recent items (not search results)
 						if !a.itemList.IsSearching() {
 							a.itemList.LoadRecentItems()
 						}
@@ -270,22 +268,19 @@ func (a *ClipboardProApp) ShowAndRun() {
 
 	go a.startCleanupRoutine()
 
-	// Check for updates on startup (after a delay)
 	if a.config.CheckUpdatesOnStartup {
 		go func() {
-			time.Sleep(5 * time.Second) // Wait for app to fully load
+			time.Sleep(5 * time.Second)
 			if a.updateChecker != nil {
-				a.updateChecker.CheckForUpdates(a.ctx, false) // Don't show "no updates" dialog
+				a.updateChecker.CheckForUpdates(a.ctx, false)
 			}
 		}()
 	}
 
-	// Load initial data
 	a.itemList.LoadRecentItems()
 
-	log.Printf("%s %s started", AppName, Version)
+	log.Printf("%s %s started", a.GetAppName(), a.GetVersion())
 
-	// Update status
 	go func() {
 		time.Sleep(2 * time.Second)
 		fyne.Do(func() {
@@ -293,11 +288,9 @@ func (a *ClipboardProApp) ShowAndRun() {
 		})
 	}()
 
-	// Show window and run app
 	a.window.Show()
 	a.fyneApp.Run()
 
-	// Cleanup
 	a.cleanup()
 }
 
@@ -333,7 +326,7 @@ func (a *ClipboardProApp) startCleanupRoutine() {
 
 func (a *ClipboardProApp) checkForUpdates() {
 	if a.updateChecker != nil {
-		a.updateChecker.CheckForUpdates(a.ctx, true) // Show "no updates" dialog
+		a.updateChecker.CheckForUpdates(a.ctx, true)
 	}
 }
 
@@ -395,11 +388,25 @@ func (a *ClipboardProApp) showAbout() {
 	}
 
 	fyne.Do(func() {
+		version := a.GetVersion()
+		appName := a.GetAppName()
+
+		var buildInfo string
+		if a.fyneApp != nil {
+			metadata := a.fyneApp.Metadata()
+			if metadata.Build > 0 {
+				buildInfo = fmt.Sprintf("Build: %d", metadata.Build)
+			} else {
+				buildInfo = fmt.Sprintf("Build: %s", BuildDate)
+			}
+		} else {
+			buildInfo = fmt.Sprintf("Build: %s", BuildDate)
+		}
+
 		content := container.NewVBox(
-			widget.NewLabelWithStyle("ClipBoard Pro", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-			widget.NewLabelWithStyle(fmt.Sprintf("Version %s", Version), fyne.TextAlignCenter, fyne.TextStyle{}),
-			widget.NewLabelWithStyle(fmt.Sprintf("Built: %s", BuildDate), fyne.TextAlignCenter, fyne.TextStyle{Italic: true}),
-			widget.NewLabelWithStyle(fmt.Sprintf("Commit: %s", GitCommit), fyne.TextAlignCenter, fyne.TextStyle{Italic: true}),
+			widget.NewLabelWithStyle(appName, fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+			widget.NewLabelWithStyle(fmt.Sprintf("Version %s", version), fyne.TextAlignCenter, fyne.TextStyle{}),
+			widget.NewLabelWithStyle(buildInfo, fyne.TextAlignCenter, fyne.TextStyle{Italic: true}),
 			widget.NewLabel(""),
 			widget.NewLabel("Advanced clipboard manager for desktop"),
 			widget.NewLabel(""),

@@ -6,6 +6,7 @@ toolchain go1.23.10
 
 require (
 	fyne.io/fyne/v2 v2.6.1
+	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/creativeprojects/go-selfupdate v1.5.0
 	github.com/uptrace/bun v1.2.14
 	github.com/uptrace/bun/dialect/sqlitedialect v1.2.14
@@ -18,7 +19,6 @@ require (
 	fyne.io/systray v1.11.0 // indirect
 	github.com/42wim/httpsig v1.2.2 // indirect
 	github.com/BurntSushi/toml v1.4.0 // indirect
-	github.com/Masterminds/semver/v3 v3.3.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/davidmz/go-pageant v1.0.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect

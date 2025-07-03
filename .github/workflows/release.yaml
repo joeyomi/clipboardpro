@@ -38,7 +38,7 @@ jobs:
           fyne package -os windows -name "${{ env.APP_NAME }}" --app-id "${{ env.APP_ID }}"
 
           # Build raw binary for updates
-          CGO_ENABLED=1 go build -ldflags "-s -w -X clipboardpro/internal/app.Version=v${{ steps.version.outputs.version }} -H=windowsgui" -o clipboardpro.exe ./main.go
+          CGO_ENABLED=1 go build -ldflags "-s -w -H=windowsgui" -o clipboardpro.exe ./main.go
 
       - name: Prepare artifacts
         shell: bash
@@ -82,7 +82,7 @@ jobs:
           fyne package -os darwin -name "${{ env.APP_NAME }}" --app-id "${{ env.APP_ID }}"
 
           # Build raw binary for updates
-          CGO_ENABLED=1 go build -ldflags "-s -w -X clipboardpro/internal/app.Version=v${{ steps.version.outputs.version }}" -o clipboardpro ./main.go
+          CGO_ENABLED=1 go build -ldflags "-s -w" -o clipboardpro ./main.go
 
       - name: Prepare artifacts
         run: |
@@ -125,7 +125,7 @@ jobs:
           fyne package -os linux -name "${{ env.APP_NAME }}" --app-id "${{ env.APP_ID }}"
 
           # Build raw binary for updates
-          CGO_ENABLED=1 go build -ldflags "-s -w -X clipboardpro/internal/app.Version=v${{ steps.version.outputs.version }}" -o clipboardpro ./main.go
+          CGO_ENABLED=1 go build -ldflags "-s -w" -o clipboardpro ./main.go
 
       - name: Prepare artifacts
         run: |
