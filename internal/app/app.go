@@ -23,9 +23,9 @@ import (
 
 // Build-time variables (set by GoReleaser)
 var (
-	Version   = "dev"     // Will be replaced by -ldflags
-	BuildDate = "unknown" // Will be replaced by -ldflags
-	GitCommit = "unknown" // Will be replaced by -ldflags
+	Version   = "0.0.0-dev" // Will be replaced by -ldflags
+	BuildDate = "unknown"   // Will be replaced by -ldflags
+	GitCommit = "unknown"   // Will be replaced by -ldflags
 )
 
 const (
@@ -398,7 +398,8 @@ func (a *ClipboardProApp) showAbout() {
 		content := container.NewVBox(
 			widget.NewLabelWithStyle("ClipBoard Pro", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 			widget.NewLabelWithStyle(fmt.Sprintf("Version %s", Version), fyne.TextAlignCenter, fyne.TextStyle{}),
-			widget.NewLabelWithStyle(fmt.Sprintf("Build: %s", BuildDate), fyne.TextAlignCenter, fyne.TextStyle{Italic: true}),
+			widget.NewLabelWithStyle(fmt.Sprintf("Built: %s", BuildDate), fyne.TextAlignCenter, fyne.TextStyle{Italic: true}),
+			widget.NewLabelWithStyle(fmt.Sprintf("Commit: %s", GitCommit), fyne.TextAlignCenter, fyne.TextStyle{Italic: true}),
 			widget.NewLabel(""),
 			widget.NewLabel("Advanced clipboard manager for desktop"),
 			widget.NewLabel(""),
