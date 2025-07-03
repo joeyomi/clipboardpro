@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -144,7 +146,7 @@ func (uc *UpdateChecker) showUpdateDialog(release *selfupdate.Release) {
 		widget.NewLabel(""),
 		widget.NewLabel("Would you like to download and install the update?"),
 		widget.NewLabel(""),
-		widget.NewLabelWithStyle("Note: The application will restart after the update.", fyne.TextAlignCenter, fyne.TextStyle{Italic: true}),
+		widget.NewLabelWithStyle("Note: The application will restart automatically after the update.", fyne.TextAlignCenter, fyne.TextStyle{Italic: true}),
 	)
 
 	dialog.ShowCustomConfirm("Update Available", "Update Now", "Later", content,
@@ -156,37 +158,37 @@ func (uc *UpdateChecker) showUpdateDialog(release *selfupdate.Release) {
 }
 
 func (uc *UpdateChecker) performUpdate(release *selfupdate.Release) {
-	fyne.Do(func() {
-		progressBar := widget.NewProgressBarInfinite()
+	progressBar := widget.NewProgressBarInfinite()
 
-		content := container.NewVBox(
-			widget.NewLabel("Downloading update..."),
-			progressBar,
-		)
+	content := container.NewVBox(
+		widget.NewLabel("Downloading and installing update..."),
+		widget.NewLabel("The application will restart automatically when complete."),
+		widget.NewLabel(""),
+		progressBar,
+	)
 
-		progress := dialog.NewCustomWithoutButtons("Updating", content, uc.app.window)
-		progress.Show()
+	progress := dialog.NewCustomWithoutButtons("Updating", content, uc.app.window)
+	progress.Show()
 
-		go func() {
-			defer fyne.Do(func() {
-				progressBar.Stop()
-				progress.Hide()
-			})
-
-			if err := uc.doUpdate(release); err != nil {
-				fyne.Do(func() {
-					dialog.ShowError(fmt.Errorf("update failed: %v", err), uc.app.window)
-				})
-				return
-			}
-
-			fyne.Do(func() {
-				dialog.ShowInformation("Update Complete",
-					"ClipBoard Pro has been updated successfully!\n\nPlease restart the application to use the new version.",
-					uc.app.window)
-			})
+	go func() {
+		defer func() {
+			progressBar.Stop()
+			time.Sleep(500 * time.Millisecond)
+			progress.Hide()
 		}()
-	})
+
+		if err := uc.doUpdate(release); err != nil {
+			fyne.Do(func() {
+				progress.Hide()
+				dialog.ShowError(fmt.Errorf("update failed: %v", err), uc.app.window)
+			})
+			return
+		}
+
+		fyne.Do(func() {
+			uc.restartApplication()
+		})
+	}()
 }
 
 func (uc *UpdateChecker) doUpdate(release *selfupdate.Release) error {
@@ -210,6 +212,23 @@ func (uc *UpdateChecker) doUpdate(release *selfupdate.Release) error {
 	}
 
 	return updater.UpdateTo(context.Background(), release, exe)
+}
+
+func (uc *UpdateChecker) restartApplication() {
+	exe, err := uc.getExecutablePath()
+	if err != nil {
+		os.Exit(0)
+		return
+	}
+
+	cmd := exec.Command(exe)
+	if err := cmd.Start(); err != nil {
+		os.Exit(0)
+		return
+	}
+
+	time.Sleep(1 * time.Second)
+	os.Exit(0)
 }
 
 func (uc *UpdateChecker) getExecutablePath() (string, error) {
