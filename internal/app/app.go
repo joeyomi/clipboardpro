@@ -23,7 +23,6 @@ import (
 
 var (
 	Version   = "0.0.0-dev"
-	BuildDate = "unknown"
 	GitCommit = "unknown"
 )
 
@@ -391,22 +390,9 @@ func (a *ClipboardProApp) showAbout() {
 		version := a.GetVersion()
 		appName := a.GetAppName()
 
-		var buildInfo string
-		if a.fyneApp != nil {
-			metadata := a.fyneApp.Metadata()
-			if metadata.Build > 0 {
-				buildInfo = fmt.Sprintf("Build: %d", metadata.Build)
-			} else {
-				buildInfo = fmt.Sprintf("Build: %s", BuildDate)
-			}
-		} else {
-			buildInfo = fmt.Sprintf("Build: %s", BuildDate)
-		}
-
 		content := container.NewVBox(
 			widget.NewLabelWithStyle(appName, fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 			widget.NewLabelWithStyle(fmt.Sprintf("Version %s", version), fyne.TextAlignCenter, fyne.TextStyle{}),
-			widget.NewLabelWithStyle(buildInfo, fyne.TextAlignCenter, fyne.TextStyle{Italic: true}),
 			widget.NewLabel(""),
 			widget.NewLabel("Advanced clipboard manager for desktop"),
 			widget.NewLabel(""),
